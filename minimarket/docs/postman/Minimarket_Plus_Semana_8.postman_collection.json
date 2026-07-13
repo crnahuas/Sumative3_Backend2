@@ -1,0 +1,300 @@
+{
+  "info": {
+    "_postman_id": "b71b8cec-8f51-4d8e-a648-4ca26465ae08",
+    "name": "MINIMARKET PLUS - Semana 8 OpenAPI y HATEOAS",
+    "description": "Flujo reproducible para validar autenticación, contrato OpenAPI y enlaces HATEOAS de Producto, Carrito, Inventario y Usuario.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Documentación OpenAPI",
+      "item": [
+        {
+          "name": "Obtener /v3/api-docs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Contrato OpenAPI disponible', () => pm.response.to.have.status(200));",
+                  "const spec = pm.response.json();",
+                  "pm.test('Contiene los cuatro recursos requeridos', () => {",
+                  "  ['/api/productos', '/api/carrito', '/api/inventario', '/api/usuarios'].forEach(path => pm.expect(spec.paths).to.have.property(path));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/v3/api-docs",
+            "description": "JSON exportable de la especificación OpenAPI. Puede guardarse desde Postman con Send and Download."
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Autenticación",
+      "item": [
+        {
+          "name": "Iniciar sesión",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Inicio de sesión aceptado', () => pm.expect([200, 302]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "username",
+                  "value": "{{username}}",
+                  "type": "text"
+                },
+                {
+                  "key": "password",
+                  "value": "{{password}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/login",
+            "description": "Spring Security crea la cookie JSESSIONID que Postman conserva para las solicitudes siguientes."
+          }
+        },
+        {
+          "name": "Listar usuarios y guardar adminId",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Usuarios protegidos accesibles', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "const users = body._embedded && body._embedded.usuarioList ? body._embedded.usuarioList : [];",
+                  "const admin = users.find(user => user.username === pm.collectionVariables.get('username'));",
+                  "pm.expect(admin, 'usuario administrador inicial').to.exist;",
+                  "pm.collectionVariables.set('adminId', admin.id);",
+                  "pm.test('La respuesta contiene HATEOAS', () => pm.expect(body._links.self.href).to.include('/api/usuarios'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/usuarios"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Preparar datos de demostración",
+      "item": [
+        {
+          "name": "Crear categoría",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Categoría creada', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('categoriaId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Bebidas {{$timestamp}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/categorias"
+          }
+        },
+        {
+          "name": "Crear producto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Producto creado', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('productoId', body.id);",
+                  "pm.test('Producto incluye enlaces', () => { pm.expect(body._links.self.href).to.include('/api/productos/'); pm.expect(body._links.productos.href).to.include('/api/productos'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nombre\": \"Agua mineral\",\n  \"precio\": 990,\n  \"stock\": 50,\n  \"categoria\": { \"id\": {{categoriaId}} }\n}"
+            },
+            "url": "{{baseUrl}}/api/productos"
+          }
+        },
+        {
+          "name": "Agregar producto al carrito",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Elemento agregado al carrito', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('carritoId', body.id);",
+                  "pm.test('Carrito enlaza usuario y producto', () => { pm.expect(body._links.usuario.href).to.include('/api/usuarios/'); pm.expect(body._links.producto.href).to.include('/api/productos/'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"usuario\": { \"id\": {{adminId}} },\n  \"producto\": { \"id\": {{productoId}} },\n  \"cantidad\": 2\n}"
+            },
+            "url": "{{baseUrl}}/api/carrito"
+          }
+        },
+        {
+          "name": "Registrar movimiento de inventario",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Movimiento registrado', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('inventarioId', body.id);",
+                  "pm.test('Inventario enlaza el producto', () => pm.expect(body._links.producto.href).to.include('/api/productos/'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"producto\": { \"id\": {{productoId}} },\n  \"cantidad\": 50,\n  \"tipoMovimiento\": \"Entrada\",\n  \"fechaMovimiento\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/inventario"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Evidencias HATEOAS",
+      "item": [
+        {
+          "name": "Producto con enlaces",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/productos/{{productoId}}"
+          }
+        },
+        {
+          "name": "Carrito con enlaces relacionados",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/carrito/{{carritoId}}"
+          }
+        },
+        {
+          "name": "Inventario con enlace al producto",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/inventario/{{inventarioId}}"
+          }
+        },
+        {
+          "name": "Usuario sin exponer contraseña",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/usuarios/{{adminId}}"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "username",
+      "value": "admin"
+    },
+    {
+      "key": "password",
+      "value": "admin123"
+    },
+    {
+      "key": "adminId",
+      "value": ""
+    },
+    {
+      "key": "categoriaId",
+      "value": ""
+    },
+    {
+      "key": "productoId",
+      "value": ""
+    },
+    {
+      "key": "carritoId",
+      "value": ""
+    },
+    {
+      "key": "inventarioId",
+      "value": ""
+    }
+  ]
+}
